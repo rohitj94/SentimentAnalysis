@@ -1,0 +1,20 @@
+tweets = LOAD 'hdfs://localhost:9000/user/flume/tweets/FlumeData.1453128271497' using com.twitter.elephantbird.pig.load.JsonLoader('-nestedLoad') as myMap;
+
+dump tweets;
+
+extract = FOREACH tweets GENERATE myMap#'id' as id , myMap#'text' as text;
+dump extract;
+tokens = FOREACH extract generate id,text,FLATTEN(TOKENIZE(text)) as word;
+
+dictionary = load '/home/acadgild/Downloads/AFINN.txt' as (word:chararray, rating:int);
+
+word_rating = join tokens by word left outer,dictionary by word using 'replicated';
+
+rating = foreach word_rating generate tokens::id as id, tokens::text as text,dictionary::rating as rate;
+word_group = group rating by (id,text);
+
+avg_rate = foreach word_group generate group, AVG(rating.rate) as tweet_rating;
+
+negative_tweets = filter avg_rate by tweet_rating<0;
+
+dump negative_tweets;
